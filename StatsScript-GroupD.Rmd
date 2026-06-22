@@ -1,0 +1,666 @@
+---
+title: 'Statistics Group Report: Maximising Paper Helicopter Flight Time'
+author: "MPS380 Group D  \nSchool of Mathematical and Physical Sciences  \nThe University
+  of Sheffield\n"
+output:
+  pdf_document:
+    toc: false
+    number_sections: true
+  word_document:
+    toc: false
+bibliography: references.bib 
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/ieee.csl
+link-citations: true
+mainfont: cochineal
+fontsize: 11pt
+endnote: false
+sansitup: true
+header-includes:
+- \usepackage{longtable}
+- \LTcapwidth=.95\textwidth
+- \linespread{1.05}
+- \usepackage{hyperref}
+- \usepackage{caption}
+- \usepackage{float}
+- \usepackage{subfig}
+- \usepackage{listings}
+- \usepackage{xcolor}
+- \definecolor{codegreen}{rgb}{0,0.6,0}
+- \definecolor{codegray}{rgb}{0.5,0.5,0.5}
+- \definecolor{codepurple}{rgb}{0.58,0,0.82}
+- \definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+- \lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2}
+- \lstset{style=mystyle}
+
+geometry: margin=1in
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(imputeTS)
+library(janitor)  # used for cleaning up column names
+library(broom) # used for tabulating 'summary' of model
+library(knitr) # table formatting
+library(glue) # string interpolation
+library(patchwork) # subplot formatting
+library(kableExtra) # formats nicer tables
+library(multimode)
+library(ggfortify)
+library(cv)
+library(latex2exp)
+
+```
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.3\textwidth]{fall.png}
+\end{figure}
+
+\thispagestyle{empty}
+\newpage
+\pagenumbering{roman} 
+\setcounter{page}{1}
+
+\topskip0pt
+\vspace*{\fill}
+\section*{\huge Abstract}
+This study investigates how to maximise the flight time of a paper helicopter, within the dimensions of a standard A4 piece of paper. An experiment was undertaken; paper helicopters were dropped from a fixed height, and the fall time was measured. The effects of all combinations of wing length, tail length, and number of wings were considered systematically. 
+
+Using methods of linear regression, a model is defined which effectively explains the variation in the data collected. A grid search is applied to the final model to find optimal levels of each variable considered, which produced a helicopter design with maximal flight time. It was found that the optimal helicopter design had the largest wing and tail length possible with the given restrictions.
+\vspace*{\fill}
+\newpage
+
+\tableofcontents
+\newpage
+\pagenumbering{arabic} 
+\setcounter{page}{1}
+
+# Introduction 
+Paper helicopters serve as a simple experimental model for quantifying the aerodynamic impact of specific design variables on flight duration. This report explores a statistical 
+experiment to examine the effect that wing length, tail length and number of wings have on a paper helicopter's flight duration. The aim of this study is to identify the optimal design for maximising the fall duration. 
+
+A replicable full factorial experiment was designed, systematically varying each of the design factors to explore the entire design space. Subsequently, a linear regression model was fitted, evaluated, and maximised for flight duration in order to find the optimal paper helicopter design.
+
+# Design of Experiment
+## Factors and Levels
+\label{sec:factors}
+
+The response variable for this experiment is the flight time of the paper helicopter, measured in seconds. The experimental unit in this study is a single helicopter drop. The experiment considered two quantitative covariate variables: wing length and tail length. Here, wing length refers to the length of an individual wing of a helicopter. Both variables were measured in millimetres. 
+
+It was hypothesised that increasing wing length would increase aerodynamic drag; longer wings should produce a larger surface area interacting with air, potentially slowing descent. However, excessively large wings would hamper stability, reducing flight duration. Similarly, a longer tail length was expected to lower the centre of mass, reducing the top-heaviness of a helicopter. In turn, this would improve stability during descent, keeping the helicopter upright, and therefore helping increase flight time. 
+
+The experiment also considered the number of wings as a qualitative factor with two levels: either two or four wings. In the construction of each helicopter design, the total surface area covered by the wings was kept constant between 2 and 4 wing designs. In real helicopters, additional blades are sometimes used to increase lift and stability [@aerodynamics, p.288]. It was thus reasonable to consider whether similar aerodynamic benefits occur in paper helicopters.
+
+A pilot study was conducted in which several other design variables were considered and explored, but were not included in the main experiment. These included: additional weight, material type, wing angle (dihedral or anhedral), wing rotation, wing and tail width, winglets (folded wings), stiffness of body and wings, body position and spin direction. These variables were excluded for several reasons.
+
+First, some variables produced predictable effects. For example, adding weight consistently decreased flight time, and so investigating this factor further would provide limited additional insight. Second, some variables introduced compounding effects; changing the material type or reinforcing the helicopter with tape altered both stiffness and overall weight. Isolating the effect of a single variable was therefore difficult. Finally, variables such as wing angle and rotation were difficult to control during free fall, compromising the reliability and reproducibility of the resulting data.
+
+
+\begin{figure}%
+    \centering
+    \subfloat[\centering Two wings]{{\includegraphics[
+      width=0.35\textwidth,
+      trim=8cm 8cm 8cm 4cm, clip
+    ]{template2_side_anno.png} }}%
+    \qquad
+    \subfloat[\centering Four wings]{{\includegraphics[
+      width=0.55\textwidth,
+      trim=2cm 8cm 2cm 4cm, clip
+    ]{template4_side_anno.png} }}%
+    \caption{3D visualisation of the designs and factors described in Section \ref{sec:factors}.}%
+    \label{fig:example}%
+\end{figure}
+
+
+## Experimental Design
+Each helicopter design was dropped three times to account for variability in the falling process and to obtain more reliable estimates of flight time. Replication reduces the influence of random variation caused by small differences in release technique or minor air disturbances.
+
+Wing length and tail length were each investigated at five levels, while the number of wings had two levels. Testing all combinations of these variables resulted in $5\times5\times2=50$ unique helicopter designs. This corresponds to a full factorial experimental design, allowing the investigation of both the individual effects of each variable and possible interaction effects between them.
+
+In total, the experiment therefore consisted of $50\times3=150$ helicopter drops. The number of experimental runs was chosen to provide sufficient data for meaningful statistical analysis while remaining feasible within the time and resource constraints of the project.
+
+The values investigated for each design variable are summarised in Table \ref{tab:levels}.
+
+```{r, echo=FALSE, results='asis'}
+cat("\\setlength{\\tabcolsep}{12pt}")
+
+variable_table <- data.frame(
+  Variable = c("Wing length (mm)", "Tail length (mm)", "Number of wings"),
+  Type = c("Quantitative", "Quantitative", "Qualitative"),
+  Levels = c("27, 54, 81, 108, 135",
+             "27, 54, 81, 108, 135",
+             "2, 4"),
+  check.names = FALSE
+)
+
+kable(
+  variable_table,
+  format = "latex",
+  booktabs = TRUE,
+  caption = "Variables and levels used in the experiment.\\label{tab:levels}",
+  align = c("l","l","l")
+) %>%
+  kable_styling(
+    latex_options = c("hold_position", "striped", "scale_down"),
+    full_width = FALSE,
+    position = "center"
+  )
+```
+
+To maintain consistency, any external environmental factors were strictly controlled. The experiment was conducted indoors with closed windows in order to minimise the influence of wind. Similarly, to account for human factors, the same individual released all the helicopters, and a second individual recorded each drop. This ensured that both the release technique and recording process remained consistent across all trials. All drops were performed from the same location in a single session.
+
+Each helicopter design was reused for all three drops to reduce material cost and waste. However, this introduces the possibility that the helicopter may become damaged over repeated trials. Helicopters were therefore inspected after each drop and replaced if any structural damage, such as tearing, was observed. Any invalid drops were immediately repeated.
+
+To mitigate the effects of subconscious bias from the record team, helicopter configurations were dropped in a random order. If helicopters were dropped in a systematic manner, preconceptions about the effects of a dependent variable could unintentionally influence the results. For example, if there is an expectation that longer wings increase flight time, then dropping helicopters in order of wing length could introduce bias in data collection. Randomising the order of designs tested made it highly unlikely that observers would recall and compare the performance of similar configurations during the experiment, and thus minimise the effect of any subconscious bias.  
+
+## Operational Guidance
+Each helicopter drop was recorded using a mobile phone camera to ensure the accuracy of measurements. The flight time was calculated as the difference between the moment of release and the first point of ground contact. A valid drop was defined to be an unobstructed free fall in which the helicopter did not collide with any objects or surfaces before reaching the ground.
+
+All helicopters were dropped from a fixed height of three metres. The drop height was measured from the ground to the bottom of the helicopter so that helicopters of different tail lengths fell the same vertical distance. A marker projecting from the wall at this height was used to guide the release position and ensure adequate distance away from any possible points of interference, such as a wall.
+
+Helicopter templates were constructed from a single sheet of A4 paper, generated programmatically to avoid human error in measurements (see Appendix \ref{app:template} and Appendix \ref{app:code}). Each template was divided into three main sections: the wings, the central body, and the tail. By adjusting the relative lengths of these sections, different helicopter dimensions could be produced while maintaining a constant total surface area. This construction method ensured that the overall weight of the helicopters remained constant across all designs, allowing the experiment to isolate the aerodynamic effects of the design variables. When constructing four-winged helicopters, the blades were arranged in a cross-shaped pattern with blades at 90-degree angles to each other. 
+
+\newpage
+
+# Exploratory Data Analysis
+Following the experimental protocol outlined previously, this section provides an exploratory data analysis of the helicopter data set before a formal model is applied. The final data set contains all 150 drops of varied design configurations. Descriptive statistics for the full data set are summarised in Table \ref{tab:summary} and visualised in Figure \ref{fig:trends}.
+
+```{r, include=FALSE}
+# Load and Clean Data
+data <- read_csv("StatsData-GroupD.csv") %>%
+  clean_names() %>% # Turns "number of wings " into "number_of_wings"
+  select(-start_time, -end_time) # Drops the columns we do not need
+data$number_of_wings <- factor(data$number_of_wings)
+clean_data <- data[-32, ]
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+# Basic Inspection
+# See the average fall time for each wing configuration
+summary_stats <- data %>% 
+  group_by(number_of_wings) %>%
+  summarize(
+    count = n(),
+    median_fall = median(fall_time),
+    mean_fall = mean(fall_time),
+    iqr_fall = IQR(fall_time),
+    sd_fall = sd(fall_time)
+  )
+
+summary_stats <- summary_stats %>%
+  mutate(number_of_wings = as.character(number_of_wings))
+
+# Summary for entirety of data
+summary_overall <- data %>%
+    summarize(
+    count = n(),
+    median_fall = median(fall_time),
+    mean_fall = mean(fall_time),
+    iqr_fall = IQR(fall_time),
+    sd_fall =sd(fall_time),
+  )
+
+summary_overall_labeled <- summary_overall %>%
+  mutate(number_of_wings = "Both", .before = count)
+
+combined_summary <- bind_rows(summary_overall_labeled, summary_stats)
+
+kable(combined_summary, 
+      digits = 4, 
+      caption = "\\label{tab:summary}Summary of helicopter data, with averages and variability of flight time in seconds.",
+      booktabs = TRUE,
+      col.names = c("Number of Wings", "Number of Designs", "Median", "Mean", "IQR",  "SD"),
+      align = c("r","c","c", "c", "c", "c")) %>%
+  kable_styling(
+    latex_options = c("hold_position", "striped", "scale_down"),
+    full_width = FALSE,
+    position = "center"
+  )
+```
+```{r, echo=FALSE} 
+# Move to appendix.
+# T test to show 2 wings statistically better than 4 wings
+t_results <- t.test(fall_time ~ number_of_wings, data=data) %>% 
+  tidy() %>% # if p-value very small, want to report as <0.001 not 0. 
+  mutate(p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3)))) %>%
+  select(estimate, statistic, p.value, conf.low, conf.high)
+
+kable(t_results, 
+      digits = 4,
+      caption = "\\label{tab:ttest} Two Sample t-test comparing flight times of 2 wing and 4 wing helicopters.",
+      col.names = c("Difference in Means", "t-statistic", "p-value", "Conf. Low (95%)", "Conf. High (95%)"),
+      booktabs=TRUE,
+      align=c('c', 'c', 'c', 'c', 'c')) %>%
+  kable_styling(
+    latex_options = c("hold_position", "striped"),
+    full_width = FALSE,
+    position = "center"
+  )
+```
+
+From Table \ref{tab:ttest}, there is significant evidence ($p \leq 0.001$) for models with two wings having a higher mean flight time (2.11 seconds) than four wings (1.72 seconds). Both two and four wings have a similar spread of the data, with an IQR of 0.880 and 0.705, respectively (Table \ref{tab:summary}). It is thus reasonable not to consider 4 wings when optimising for flight time.
+
+```{r flighttrend, fig.cap="\\label{fig:trends} \\textbf{Left Figure}. Wing Length vs Flight Time. \\textbf{Right Figure}. Tail Length vs Flight Time. Wing length appears to have a non-linear, possibly quadratic relationship with flight time. Tail length has a linear relationship with flight time.", out.height="30%", fig.align = 'center', echo=FALSE, message=FALSE}
+# Plot of flight time vs wing length
+wing <- ggplot(data = data, aes(x = wing_length, y = fall_time, color = factor(number_of_wings))) +
+  geom_smooth(se = TRUE) +
+  geom_point() +
+  labs(
+    x = "Wing Length (mm)",
+    y = "Flight Time (s)",
+    color = "Number of Wings"
+  )
+
+# Plot of flight time vs tail length
+tail <- ggplot(data = data, aes(x = tail_length, y = fall_time, color = factor(number_of_wings))) +
+  geom_smooth(se = TRUE) +
+  geom_point() +
+  labs(
+    x = "Tail Length (mm)",
+    y = "Flight Time (s)",
+    color = "Number of Wings"
+  )
+
+(wing|tail) + plot_layout(guides='collect') & 
+  theme(legend.position='bottom')
+
+```
+```{r, include=FALSE, echo=FALSE}
+cor(data$fall_time, data$wing_length)
+cor(data$fall_time, data$wing_length^2) # Marginally better correlation.
+```
+
+\newpage
+
+Graphical summaries of the helicopter data (Figure \ref{fig:trends}) suggest the relationship between flight time and wing length is not linear. When testing flight time against wing length and $(\text{wing length})^2$, correlation improves marginally from 0.6429 to 0.6439, respectively. This suggests the linear model should include a quadratic term. However, the relationship between flight time and tail length appears linear. Therefore, no transformations will be applied to the tail length.
+
+```{r histogram, fig.cap="\\label{fig:histograms} \\textbf{Left Figure}. Flight Times vs Number of Wings. \\textbf{Right Figure}.  Histograms of flight times seperated by number of wings. The graphs appear to show a bimodal distribution of the data.", out.height="30%", fig.align = 'center', echo=FALSE, message=FALSE}
+# Number of Wings Comparison
+boxp <- ggplot(data, aes(x = factor(number_of_wings), y = fall_time, fill = factor(number_of_wings))) +
+  geom_boxplot() +
+  labs(x = "Number of Wings", y = "Flight Time (s)") +
+  guides(fill = "none")
+
+hist <- ggplot(data, aes(x = fall_time, fill=factor(number_of_wings))) +
+  geom_histogram(bins = 15) +
+  labs(x = "Flight Time (s)", y = "Frequency", fill = 'Number of Wings') +
+  facet_wrap(~number_of_wings)
+
+(boxp|hist) + plot_layout(guides='collect') & 
+  theme(legend.position='bottom')
+```
+
+
+Histograms of the frequency of flight times for different numbers of wings (Figure \ref{fig:histograms}) suggest there could be a bimodal distribution in the data. If this is the case, it implies that a single linear model may not accurately explain any relationships in the data. Upon analysis using the dip test [@dip-test] and Silverman’s method of Kernel Density Estimates [@silverman] (Table \ref{tab:modetests}), it was found that there is no statistically significant evidence for multimodality in the data. A single linear model is adequate to explain any relationships between flight time and the explanatory variables. 
+
+```{r multimodality, echo=FALSE, comment=FALSE, message=FALSE, warning=FALSE}
+# Testing for multimodality using Dip test and Silverman's. For documentation, see: https://cran.r-project.org/web/packages/multimode/multimode.pdf.
+
+p_2_hh <- modetest(data$fall_time[data$number_of_wings==2], method="HH")$p.value
+p_2_si <- modetest(data$fall_time[data$number_of_wings==2], method="SI")$p.value
+p_4_hh <- modetest(data$fall_time[data$number_of_wings==4], method="HH")$p.value
+p_4_si <- modetest(data$fall_time[data$number_of_wings==4], method="SI")$p.value
+
+mode_results <- data.frame(
+  `Number of Wings` = c(2, 2, 4, 4),
+  `Method` = c("Dip", "Silverman", "Dip", "Silverman"),
+  `P-Value` = c(p_2_hh, p_2_si, p_4_hh, p_4_si)
+)
+
+kable(mode_results, 
+      digits = 4, 
+      caption = "\\label{tab:modetests}Statistical tests for multimodality (Null Hypothesis: Distribution is unimodal).",
+      booktabs = TRUE,
+      col.names = c("Number of Wings", "Test Method", "p-value"),
+      align = c("c","l","l")) %>%
+  kable_styling(
+    latex_options = c("hold_position", "striped", "scale_down"),
+    full_width = FALSE,
+    position = "center"
+  )
+```
+
+\newpage
+
+# Modelling
+## Model Synthesis
+To predict the flight time (response) from the observed variables, a linear regression model was constructed. To select the features in the model, backwards elimination was deployed. Based on the EDA, the most complex model this investigation will consider is.
+\begin{equation}
+\label{eq:model2}
+Y \sim W^2*T*N,
+\end{equation}
+where $Y$ is the flight time, $W$ is the wing length, $T$ is the tail length, and $N$ is the number of blades.
+Note that the factor $N$ is represented as 
+$$ N = \begin{cases} 2 \text{ if the design has 2 wings,} \\ 4 \text{ if the design has 4 wings.} \end{cases}$$ 
+Notation in Equation (\ref{eq:model2}) is equivalent to the full factorial expansion of the model,
+\begin{align*}
+y_{i} = \beta_{0} &+ \beta_{W^2}x_{W^2 i} + \beta_{W}x_{W i} + \beta_{T}x_{T i} + \beta_{N}x_{N i} \\
+&+ \beta_{W T}x_{W T i} + \beta_{W N}x_{W N i} + \beta_{T N}x_{T N i} + \beta_{W T N}x_{W T N i} + \epsilon_i,
+\end{align*}
+where $y_{i}$ is the flight time in seconds of the $i$-th design, $x_{W i}$ is the wing length in mm,  $x_{T i}$ is the tail length in mm, $x_{N i}$ is the number of wings, $\epsilon_i$ is the error, assumed to be $\epsilon_i \sim N(0, \sigma^2).$
+
+
+```{r diagnostic, warning=FALSE, out.width="70%", fig.align = 'center', echo=FALSE, message=FALSE, fig.cap="Diagnostic plots for the model described in Equation (\\ref{eq:model2}). Note the outlier present in the Q-Q plot, that being the design with the shortest wing length and tail length observed. \\label{fig:diagnostics}"}
+m3 <- lm(fall_time ~ poly(wing_length, 2)*tail_length*number_of_wings, data=data)
+
+resid <- augment(m3) |>
+  ggplot(aes(x = .fitted, y = .resid)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(title = "Residuals vs Fitted", x = "Fitted value", y = "Residual")
+
+qq <- augment(m3) |>
+  ggplot(aes(sample = .std.resid)) +
+  geom_qq() +
+  geom_qq_line() +
+  labs(title = "Q-Q plot",
+       x = "Theoretical quantiles", y = "Observed quantiles")
+
+scaleloc <- ggplot(augment(m3), aes(x = .fitted, y = sqrt(abs(.std.resid)))) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(
+    x = "Fitted values",
+    y = TeX("$\\sqrt{|Standardised residuals|}$"),
+    title = "Scale-Location Plot"
+  )
+
+leverage <- ggplot(augment(m3), aes(x = .hat, y = .std.resid)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(
+    x = "Leverage",
+    y = "Standardised Residuals",
+    title = "Residuals vs Leverage"
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed")
+
+(resid|qq)/(scaleloc|leverage)
+```
+
+Figure \ref{fig:diagnostics} presents four diagnostics plots for the model in Equation
+(\ref{eq:model2}). The Q-Q plot shows that the assumption of normality of error is correct. Residuals vs fitted plot shows non-linearity. The scale-location plot provides evidence of homoscedasticity. Residuals vs leverage plot gives little evidence of distortion of the model. However, it is clear that there is an outlier (with 27mm wing length, 27mm tail length, 2 wings). Upon reviewing the recordings for this design, the helicopter showed little or no rotation in all three drops and did not fall in the intended manner. Therefore, it is acceptable to omit this outlier as it does not provide an accurate representation of the selected variables.
+
+## Model Simplification
+
+Through an ANOVA test, results showed that the quadratic term for wing length was not significant in the model. Furthermore, ANOVA suggests that the three-way interaction between the main effects is very significant to the fit and performance of the model with $p<0.001$. Therefore, due to the hierarchical properties of interactive terms, all lower-order interactive terms must also remain in the model. Hence, a reduced model without the quadratic term is likely the best performer. The final model will be referred to as
+\begin{equation}
+\label{eq:model}
+Y \sim W*T*N.
+\end{equation}
+
+```{r include=FALSE}
+
+model <- lm(fall_time ~ wing_length*tail_length*number_of_wings, data=clean_data)
+m3 <- lm(fall_time ~ poly(wing_length, 2)*tail_length*number_of_wings, data=clean_data)
+m1 <- lm(fall_time ~ wing_length + tail_length + number_of_wings + wing_length:tail_length + wing_length:number_of_wings + tail_length:number_of_wings, data=clean_data)
+m2 <- lm(fall_time ~ wing_length + tail_length + number_of_wings, data=clean_data)
+
+comp <- map_dfr(list(model, m3, m1, m2), function(m) {
+  g <- glance(m)
+  data.frame(
+    r.squared = g$r.squared,
+    adj.r.squared = g$adj.r.squared,
+    statistic = g$statistic,
+    AIC = g$AIC,
+    BIC = g$BIC,
+    CV = sqrt(cv(m, k = 5)[["CV crit"]])
+  )
+})
+
+names(comp) <- c("$R^2$", "Adj. $R^2$", "$t$-statistic", "AIC", "BIC", "CV RMSE")
+rownames(comp) <- c("$Y \\sim W*T*N$", "$Y \\sim W^2*T*N$", "$Y \\sim W+T+N+W:T+W:N+T:N$", "$Y \\sim W+T+N$")
+comp <- rownames_to_column(comp, "Model")
+```
+
+```{r echo=FALSE}
+kable(
+  comp,
+  format = "latex",
+  booktabs = T,
+  escape = FALSE,
+  digits=3,
+  caption = "Model simplification results, best performer is full model with no quadratic terms, based on AIC \\label{tab:Simp}",
+) %>%
+  kable_styling(
+    latex_options = c("hold_position", "striped", "scale_down"),
+    full_width = FALSE,
+    position = "center",
+  )
+```
+
+
+Table \ref{tab:Simp} compares different reductions to the model in Equation \ref{eq:model2}. The results show that, based on AIC, all reductions (and the quadratic term) performed worse than the final model (Equation \ref{eq:model}). In the reduced models, this indicates that the reduction of complexity in the model does not outweigh the loss of accuracy in the estimators. As for the quadratic term, the evidence of a high BIC value demonstrates heavy penalisation on complexity. As expected, values of $R^2$ dropped as reductions were made. However, the adjusted $R^2$ being similar for both the final model and the quadratic term model indicates that the inclusion of a quadratic term provides little extra explanatory power. A 5-fold cross-validation test was also performed; when exposed to new data, reduced models had a greater RMSE than the final model, again suggesting a worse prediction of flight time.
+
+
+# Results 
+## Model Analysis
+The final model summary is shown in Table \ref{tab:model}. The model accounts for around 73% of variance ($R^2 = 0.726$), thus showing a strong fit. There is strong evidence that wing length, tail length, number of wings and their interactions affect flight time. Because of the high significance of interactions, the strength of main effects are intercorrelated: the effect of each variable depends on the levels of the others. Hence, the effects of each variable cannot be considered alone.
+
+```{r echo = FALSE}
+g <- glance(model)
+
+tm <- tidy(model) %>% 
+  mutate(term = recode(term,
+    `(Intercept)` = "Intercept", 
+    wing_length = "$\\beta_W$", 
+    tail_length = "$\\beta_T$", 
+    number_of_wings4 = "$\\beta_N$", 
+    `wing_length:tail_length` = "$\\beta_{WT}$", 
+    `wing_length:number_of_wings4` = "$\\beta_{WN}$", 
+    `tail_length:number_of_wings4` = "$\\beta_{TN}$", 
+    `wing_length:tail_length:number_of_wings4` = "$\\beta_{WTN}$"
+  )) %>% 
+  mutate(p.value = ifelse(p.value < 0.001, "< 0.001", round(p.value, 4))) %>%
+  rename(
+    "Term" = term,
+    "Estimate" = estimate,
+    "Std. Error" = std.error,
+    "$t$-statistic" = statistic,
+    "$p$-value" = p.value
+  )
+kable(
+  tm,
+  format = "latex",
+  booktabs = T,
+  escape = FALSE,
+  digits=4,
+  caption = "Final model ($Y \\sim W*T*N$) summary, $R^2 = 0.726$. \\label{tab:model}",
+) %>%
+  kable_styling(
+    latex_options = c("hold_position", "striped", "scale_down"),
+    full_width = FALSE,
+    position = "center",
+  )
+```
+
+
+
+
+## Optimal Design Configuration
+The optimal design for maximum flight time was determined to be: 2 wings, tail length of 135mm, wing length of 135mm and a body length of 27mm. Thus leading to a predicted mean flight time of 2.88 seconds. The closest observed design in the experiment (also 2 wings, tail length of 135mm and wing length of 135mm) had flight times of 2.85s, 2.80s and 1.90s, which is consistent with the predicted optimal model. This was found through maximisation of the model in Table \ref{tab:model} through a grid search within the plausible range 27mm to 135mm.
+
+Figure \ref{fig:predicted} gives a visual representation of the model in Table \ref{tab:model}. In the two  wings case, the model favours a high combination of wing length and tail length, whereas in the four wings case, a lower tail length combined with a higher wing length gives the best results.
+
+Figure \ref{fig:interaction} illustrates the effect that the interactions have upon each other. Firstly, note how, in the two wings case, the variation of tail length affects the gradient of wing length; a combination of longer tail with shorter wings results in a much shorter fall time than a combination of shorter tail with shorter wings. Hence, in the two wings case, to achieve the highest fall duration, the model favours a wing/tail ratio of 1. In the four wings case, the dependence of wing length and tail length is relaxed, and a similar gradient is shared between different combinations of tail and wing length.
+
+
+```{r echo=FALSE, fig.cap="Contour plot of predicted values of the model within the experiment design space. \\label{fig:predicted}", out.height="30%", fig.align='center'}
+grid <- expand.grid(
+  wing_length = seq(min(data$wing_length), max(data$wing_length), length.out = 50),
+  tail_length = seq(min(data$tail_length), max(data$tail_length), length.out = 50),
+  number_of_wings = c(2, 4)
+)
+
+grid$number_of_wings <- factor(grid$number_of_wings, levels = c(2, 4))
+grid$Y <- predict(model, newdata = grid)
+
+ggplot(grid, aes(x = wing_length, y = tail_length, z = Y)) +
+  geom_raster(aes(fill = Y)) +
+  geom_contour(color="white") +
+  facet_wrap(~ number_of_wings, labeller = labeller(number_of_wings = c("2" = "2 wings", "4" = "4 wings"))) +
+  labs(
+    x = "Wing Length (mm)",
+    y = "Tail Length (mm)",
+    fill = "Flight Time (s)",
+  ) +
+  scale_fill_viridis_c() +
+  theme(
+    panel.grid = element_blank(),      # removes major and minor grid lines
+    legend.position='bottom'
+)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.height = "40%", fig.align='center', fig.cap="Three way interaction diagram of main effects. Note how the effect of the ratio of the wing and tail lengths is heavily influenced by the number of wings. \\label{fig:interaction}", out.height="30%", fig.align='center'}
+grid <- expand.grid(
+  wing_length = seq(min(data$wing_length), max(data$wing_length), length.out = 50),
+  tail_length = quantile(data$tail_length, probs = c(0.25, 0.5, 0.75)),
+  number_of_wings = factor(c(2, 4))
+)
+
+grid$Y <- predict(model, newdata = grid)
+
+ggplot(data=grid, aes(x=wing_length, y = Y, colour = factor(tail_length))) +
+  geom_line(size = 1) +
+  facet_wrap(~number_of_wings, labeller = labeller(number_of_wings = c("2" = "2 wings", "4" = "4 wings"))) +
+  labs(
+    x = "Wing Length (mm)",
+    y = "Predicted Flight Time (s)",
+    colour = "Tail Length (mm)",
+  ) +
+  theme(
+    legend.position = 'bottom'
+  )
+```
+
+
+# Post Result Analysis
+## Discussion
+To find the optimal design, stationary points for the independent variables could be calculated through partial differentiation of the model in Table \ref{tab:model}. This method provided solutions outside the range of experimental data. This extrapolation of data far beyond the obtained data raised concerns about the credibility of the result as it could not be verified due to the dimensional constraints of an A4 piece of paper. It was therefore rejected as a solution and a grid search method to find a plausible configuration was applied instead.
+
+\begin{wrapfigure}{r}{0.30\textwidth}
+  \begin{center}
+    \includegraphics[width=0.30\textwidth]{template4_top.png}
+  \end{center}
+  \caption{Top-down view of a four-winged design.}
+  \label{fig:template4_top}
+\end{wrapfigure}
+
+Assumptions were made in designing the four-winged helicopters. Firstly, both two-winged cases and four-winged cases shared equal surface area; in reality, most true helicopters achieve greater aerodynamic efficiency through longer, not wider wings. Regardless, a different design can avoid this assumption by doubling the surface area in the four-winged case. Secondly, the method for keeping the wings perpendicular was to introduce a fold between the outer wings, from above (see Figure \ref{fig:template4_top}). This does not truly create a cross shape, which may affect aerodynamic efficiency. A more complex template could be designed to avoid this issue, with the drawback of being more difficult to manufacture.
+
+
+In the main experiment, flight time was measured from the point of dropping. An alternative method was also considered: the start time would be taken as the moment a helicopter entered a stable spin state. However, identifying the precise moment at which this occurs is subjective and difficult to determine consistently from video recordings. In addition, the transition into a spinning state does not occur instantaneously and may vary between designs, making it difficult to determine a clear and reproducible starting point for measurement, potentially disregarding a valid portion of the descent. For these reasons, this method was not adopted.
+
+The robust fit of the final model ($R^2 = 0.726$) was hypothesised to be due to the choice of variables explored, which had a strong effect on the flight time. Keeping the experiment relatively simple and replicable allowed the collection of data to be highly accurate, mitigating human errors which could obscure true relationships between variables. 
+
+
+## Limitations
+When conducting the experiment, templates were generated programmatically and then printed to be as precise as possible with the measurements. Templates were cut by hand, so the results and data do not account for printer error or human error. For maximum precision or for manufacturing purposes, a laser cutting machine combined with an industrial paper folder could be used instead of cutting and folding by hand.
+
+Analysis also took place to analyse whether the helicopter became damaged during the drops, but no evidence was found to support this. Recall that for each observation, three drops are performed per helicopter. The mean flight time for all drops, one, two and three, appears to be similar: 1.877, 1.877, 1.973, respectively. 
+
+Another limitation of this study was the lack of full randomisation across the 150 experimental trials. Due to time and practical constraints, the three drops for each helicopter design were performed consecutively rather than being dispersed throughout the entire testing sequence. This introduces the risk of autocorrelation or systematic bias, potentially skewing the mean flight time for that configuration. To address these challenges, future trials could adopt blocked randomisation. In this approach, the experiment would be divided into three distinct blocks, spread over different days, ensuring a fair distribution of time-related variables. By doing so, factors like changes in air currents or operator fatigue would be evenly distributed across all designs instead of just one.
+
+# Conclusion
+The objective of the experiment was to find the optimal design of a paper helicopter, constrained to the length of an A4 page, by varying the wing length, tail length and number of wings. A linear model was constructed. Using a grid search algorithm on model predictions, the design with optimal flight time was found to have a wing length of 135mm, tail length of 135mm and 2 wings. The four-winged design had a significant negative effect on the flight duration, potentially due to limitations of the design. It was found that the main effects cannot be explored in isolation; they are instead heavily correlated.
+
+\newpage
+
+# References {-}
+
+<div id="refs"></div>
+
+\appendix
+
+# Appendix
+## Paper Helicopter Template {#app:template}
+![](template_0)
+
+## Code For Generating Templates {#app:code}
+
+\begin{lstlisting}[language=Python]
+from dataclasses import dataclass
+import numpy as np
+import svgwrite
+
+paper_width = 210
+paper_height = 297
+
+## Number of templates per a4 sheet
+number_of_templates = 3
+
+template_width = paper_width/number_of_templates
+template_height = paper_height
+
+min_wing_length = 27
+min_tail_length = 27
+min_body_length = 13.5
+maximum_segments = 5
+
+@dataclass
+class Template:
+    wing_length: float
+    tail_length: float
+
+templates = []
+
+th2 = template_height/2
+for wing in np.linspace(min_body_length, th2-min_wing_length, maximum_segments):
+    for tail in np.linspace(min_body_length, th2-min_tail_length, maximum_segments):
+        templates.append(Template(th2-wing, th2-tail))
+
+for i, page_templates in enumerate(np.array_split(templates, np.ceil(len(templates)/number_of_templates))):
+    dwg = svgwrite.Drawing(f"template_{i}.svg", size=(f"{paper_width}mm", f"{paper_height}mm"), viewBox=f"0 0 {paper_width} {paper_height}")
+
+    for j, template in enumerate(page_templates):
+        print(template)
+        strokes = "5,5"
+        offset = j*template_width
+
+        dwg.add(dwg.rect((offset, 0), (template_width, template_height), fill="white", stroke="black"))
+        dwg.add(dwg.line((offset, 0), (offset, template_height), stroke="black"))
+
+        middle = offset+template_width/2
+        dwg.add(dwg.line((offset+template_width/4, 0), (offset+template_width/4, template.wing_length), stroke="black"))
+        dwg.add(dwg.line((offset+3*template_width/4, 0), (offset+3*template_width/4, template.wing_length), stroke="black"))
+        dwg.add(dwg.text(f"{template.wing_length}", insert=(middle+2, template.wing_length/2), font_size="6px"))
+
+        dwg.add(dwg.line((middle, 0), (middle, template.wing_length), stroke="black"))
+        dwg.add(dwg.line((offset, template.wing_length), (offset+template_width, template.wing_length), stroke="black", stroke_dasharray=strokes))
+
+        body_length = template_height-(template.wing_length+template.tail_length)
+        after_body = body_length+template.wing_length
+        quarter = template_width/4
+        dwg.add(dwg.line((offset, after_body), (offset+quarter, after_body), stroke="black"))
+        dwg.add(dwg.line((offset+quarter, after_body), (offset+quarter, after_body+template.tail_length), stroke="black", stroke_dasharray=strokes))
+        dwg.add(dwg.line((offset+quarter*3, after_body), (offset+quarter*4, after_body), stroke="black"))
+        dwg.add(dwg.line((offset+quarter*3, after_body), (offset+quarter*3, after_body+template.tail_length), stroke="black", stroke_dasharray=strokes))
+        dwg.add(dwg.text(f"{template.tail_length}mm", insert=(offset+quarter+2, after_body+template.tail_length/2), font_size="6px"))
+
+        dwg.add(dwg.line((offset, template_height-10), (offset+quarter*4, template_height-10), stroke="black", stroke_dasharray=strokes))
+
+    dwg.save()
+\end{lstlisting}
+
+
+
+
